@@ -5,294 +5,330 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام إدارة الإجازات السحابي</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
+        /* التنسيقات الأصلية مع تحسينات طفيفة */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; }
         .header { text-align: center; color: white; margin-bottom: 30px; }
+        h1, h2, h3 { color: #333; }
         .login-form, .admin-panel, .employee-panel { background: white; border-radius: 15px; padding: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .form-group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
-        input, textarea, button { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; }
-        button { background: #667eea; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { transform: translateY(-2px); opacity: 0.9; }
-        button.danger { background: #ff6b6b; }
-        .table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        input, select, textarea, button { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; }
+        button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,126,234,0.4); }
+        button.danger { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%); }
+        .table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
         .table th, .table td { padding: 12px; text-align: center; border-bottom: 1px solid #eee; }
-        .table th { background: #f8f9fa; }
-        .status-pending { color: #856404; background: #fff3cd; }
-        .status-approved { color: #155724; background: #d4edda; }
-        .status-rejected { color: #721c24; background: #f8d7da; }
+        .table th { background: #f8f9fa; font-weight: bold; }
+        .status-pending { background: #fff3cd; color: #856404; }
+        .status-approved { background: #d4edda; color: #155724; }
+        .status-rejected { background: #f8d7da; color: #721c24; }
         .nav-buttons { display: flex; gap: 10px; margin-bottom: 20px; }
+        .nav-buttons button { flex: 1; padding: 15px; font-size: 16px; }
         .hidden { display: none !important; }
+        .upload-section { border: 2px dashed #667eea; border-radius: 10px; padding: 20px; text-align: center; margin-top: 25px; background: #f8f9fe; }
+        .upload-section label { background: #667eea; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; display: inline-block; margin-top: 10px;}
+        .upload-section input[type="file"] { display: none; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header"><h1>🏖️ نظام الإجازات السحابي</h1></div>
+        <div class="header"><h1>🏖️ نظام إدارة الإجازات السحابي</h1></div>
 
         <div id="loginScreen" class="login-form">
-            <h2 style="text-align: center; margin-bottom: 20px;">تسجيل الدخول</h2>
-            <input type="text" id="empCodeLogin" placeholder="أدخل الكود (ADMIN للرئيس أو كود الموظف)">
-            <button onclick="login()" style="margin-top: 15px;">دخول</button>
+            <h2>تسجيل الدخول</h2>
+            <div class="form-group">
+                <label>كودك الوظيفي:</label>
+                <input type="text" id="empCodeLogin" placeholder="أدخل الكود أو ADMIN">
+            </div>
+            <button onclick="login()">دخول</button>
         </div>
 
         <div id="adminPanel" class="admin-panel hidden">
             <div class="nav-buttons">
                 <button onclick="showSection('employeesSection')">إدارة الموظفين</button>
-                <button onclick="showSection('requestsSection')">الطلبات الواردة</button>
+                <button onclick="showSection('requestsSection')">عرض الطلبات</button>
                 <button onclick="logout()" class="danger">خروج</button>
             </div>
-            
+
             <div id="employeesSection">
                 <h3>إضافة / تعديل موظف</h3>
                 <div class="form-grid">
-                    <input type="text" id="empName" placeholder="اسم الموظف">
-                    <input type="text" id="empCode" placeholder="كود الموظف (مثال: 1001)">
-                    <input type="text" id="empTitle" placeholder="المسمى الوظيفي">
-                    <input type="number" id="empBalance" placeholder="رصيد الإجازات">
+                    <div class="form-group"><label>الاسم:</label><input type="text" id="empName"></div>
+                    <div class="form-group"><label>كود وظيفي:</label><input type="text" id="empCode"></div>
+                    <div class="form-group"><label>المسمى الوظيفي:</label><input type="text" id="empTitle"></div>
+                    <div class="form-group"><label>تاريخ التعيين:</label><input type="date" id="empHireDate"></div>
+                    <div class="form-group"><label>رصيد الإجازات:</label><input type="number" id="empBalance" min="0"></div>
                 </div>
-                <button onclick="addEmployee()">حفظ بيانات الموظف</button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <button id="addEditBtn" onclick="addEmployee()">إضافة موظف</button>
+                    <button onclick="clearEmployeeForm()" class="danger">مسح الحقول</button>
+                </div>
                 
+                <div class="upload-section">
+                    <h4>استيراد بيانات من Excel</h4>
+                    <p style="color: #666; font-size: 13px;">(الترتيب: الكود، الاسم، المسمى، التاريخ، الرصيد)</p>
+                    <label for="excelFile">اختر ملف .xlsx</label>
+                    <input type="file" id="excelFile" accept=".xlsx, .xls" onchange="handleFileUpload(event)">
+                </div>
+
                 <table class="table" id="employeesTable">
-                    <thead><tr><th>الكود</th><th>الاسم</th><th>المسمى</th><th>الرصيد</th><th>إجراء</th></tr></thead>
+                    <thead><tr><th>كود</th><th>الاسم</th><th>المسمى</th><th>تاريخ التعيين</th><th>الرصيد</th><th>الإجراءات</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
 
             <div id="requestsSection" class="hidden">
-                <h3>طلبات إجازات الموظفين</h3>
+                 <h3>طلبات الإجازة الواردة</h3>
                 <table class="table" id="requestsTable">
-                    <thead><tr><th>الموظف</th><th>بداية الإجازة</th><th>الأيام</th><th>السبب</th><th>الحالة</th><th>إجراء</th></tr></thead>
+                    <thead><tr><th>الكود</th><th>الاسم</th><th>التاريخ</th><th>المدة</th><th>السبب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
         </div>
 
         <div id="employeePanel" class="employee-panel hidden">
-            <h2 id="welcomeMsg" style="margin-bottom: 15px; color: #555;"></h2>
             <div class="nav-buttons">
-                <button onclick="showSection('newRequestSection')">طلب إجازة جديد</button>
-                <button onclick="loadMyRequests()">سجل طلباتي</button>
+                <button onclick="showNewRequest()">طلب إجازة جديدة</button>
+                <button onclick="showMyRequests()">سجل طلباتي</button>
                 <button onclick="logout()" class="danger">خروج</button>
             </div>
-            
+            <div class="employee-info" style="margin-bottom: 20px; padding: 15px; background: #f0f4ff; border-radius: 10px;">
+                <h3>مرحباً، <span id="currentEmpName"></span></h3>
+                <p>كود الموظف: <strong id="currentEmpCode"></strong></p>
+            </div>
+
             <div id="newRequestSection">
-                <h3>تقديم طلب إجازة</h3>
-                <div class="form-grid">
-                    <input type="date" id="startDate" title="تاريخ بداية الإجازة">
-                    <input type="number" id="days" placeholder="عدد الأيام المطلوبة">
-                </div>
-                <textarea id="reason" placeholder="سبب الإجازة (اختياري)" rows="3" style="margin-bottom: 15px;"></textarea>
-                <button onclick="submitRequest()">إرسال الطلب للسحابة</button>
+                <h3>تقديم طلب جديد</h3>
+                <div class="form-group"><label>تاريخ البدء:</label><input type="date" id="startDate"></div>
+                <div class="form-group"><label>عدد الأيام:</label><input type="number" id="days" min="1" max="30"></div>
+                <div class="form-group"><label>السبب:</label><textarea id="reason" rows="4"></textarea></div>
+                <button onclick="submitRequest()">إرسال الطلب</button>
             </div>
 
             <div id="myRequestsSection" class="hidden">
-                <h3>تاريخ طلباتي السابقة</h3>
+                <h3>حالة طلباتي</h3>
                 <table class="table" id="myRequestsTable">
-                    <thead><tr><th>التاريخ</th><th>الأيام</th><th>السبب</th><th>الحالة</th></tr></thead>
+                    <thead><tr><th>التاريخ</th><th>المدة</th><th>السبب</th><th>الحالة</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <script>
-        // --- إعدادات سوبابيز (مستخرجة من حسابك) ---
-        const SUPABASE_URL = 'https://ijahjrlunbkzerqnzgae.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_AzrJuN8u2lFWubntvWTHBg_FKz-mo6I';
-        
-        // تم تصحيح اسم المتغير هنا لمنع تعارض الأكواد
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+<script>
+    // --- إعدادات سوبابيز ---
+    const SUPABASE_URL = 'https://ijahjrlunbkzerqnzgae.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_AzrJuN8u2lFWubntvWTHBg_FKz-mo6I';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        let currentUser = null;
+    let currentUser = null;
 
-        // دالة تسجيل الدخول
-        async function login() {
-            const inputVal = document.getElementById('empCodeLogin').value.trim().toUpperCase();
-            
-            if (!inputVal) {
-                alert('الرجاء إدخال الكود أولاً!');
-                return;
-            }
+    // تسجيل الدخول
+    async function login() {
+        const code = document.getElementById('empCodeLogin').value.toUpperCase().trim();
+        if (!code) return alert('الرجاء إدخال الكود');
 
-            // التحقق من المدير
-            if (inputVal === 'ADMIN') {
-                currentUser = { code: 'ADMIN', name: 'المدير العام' };
-                showAdminPanel();
-                return;
-            }
+        if (code === 'ADMIN') {
+            currentUser = { code: 'ADMIN', name: 'المدير' };
+            showAdminPanel();
+            return;
+        }
 
-            // التحقق من الموظف
-            try {
-                const { data, error } = await supabaseClient.from('employees').select('*').eq('code', inputVal).single();
-                
-                if (error) throw error;
-                
-                if (data) {
-                    currentUser = data;
-                    document.getElementById('welcomeMsg').innerText = `أهلاً بك، ${currentUser.name}`;
-                    showEmployeePanel();
+        const { data, error } = await supabaseClient.from('employees').select('*').eq('code', code).single();
+        if (data) {
+            currentUser = data;
+            showEmployeePanel();
+        } else {
+            alert('❌ كود غير موجود في النظام!');
+        }
+    }
+
+    // إضافة موظف (Database)
+    async function addEmployee() {
+        const emp = {
+            code: document.getElementById('empCode').value.toUpperCase().trim(),
+            name: document.getElementById('empName').value.trim(),
+            jobTitle: document.getElementById('empTitle').value.trim(),
+            hire_date: document.getElementById('empHireDate').value || null,
+            balance: parseInt(document.getElementById('empBalance').value) || 0
+        };
+
+        if (!emp.name || !emp.code) return alert('يجب إدخال الاسم والكود');
+
+        const { error } = await supabaseClient.from('employees').upsert([emp]);
+        if (error) alert('خطأ: ' + error.message);
+        else {
+            alert('✅ تم الحفظ بنجاح');
+            loadEmployees();
+            clearEmployeeForm();
+        }
+    }
+
+    // جلب الموظفين
+    async function loadEmployees() {
+        const { data } = await supabaseClient.from('employees').select('*').order('code');
+        const tbody = document.querySelector('#employeesTable tbody');
+        tbody.innerHTML = (data || []).map(emp => `
+            <tr>
+                <td>${emp.code}</td>
+                <td>${emp.name}</td>
+                <td>${emp.jobTitle || '-'}</td>
+                <td>${emp.hire_date || '-'}</td>
+                <td>${emp.balance}</td>
+                <td>
+                    <button onclick="editEmployee('${emp.code}')" style="background:#2196F3; padding:5px; font-size:12px;">تعديل</button>
+                    <button onclick="deleteEmployee('${emp.code}')" class="danger" style="padding:5px; font-size:12px;">حذف</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // حذف موظف
+    async function deleteEmployee(code) {
+        if (confirm('هل أنت متأكد؟')) {
+            await supabaseClient.from('employees').delete().eq('code', code);
+            loadEmployees();
+        }
+    }
+
+    // إرسال طلب إجازة (Database)
+    async function submitRequest() {
+        const req = {
+            empCode: currentUser.code,
+            empName: currentUser.name,
+            startDate: document.getElementById('startDate').value,
+            days: parseInt(document.getElementById('days').value),
+            reason: document.getElementById('reason').value,
+            status: 'pending'
+        };
+
+        if (!req.startDate || !req.days) return alert('أكمل البيانات');
+
+        const { error } = await supabaseClient.from('requests').insert([req]);
+        if (error) alert('فشل الإرسال');
+        else {
+            alert('✅ تم تقديم الطلب');
+            document.getElementById('startDate').value = '';
+            document.getElementById('days').value = '';
+            document.getElementById('reason').value = '';
+        }
+    }
+
+    // جلب الطلبات للمدير
+    async function loadRequests() {
+        const { data } = await supabaseClient.from('requests').select('*').order('id', { ascending: false });
+        const tbody = document.querySelector('#requestsTable tbody');
+        tbody.innerHTML = (data || []).map(req => `
+            <tr class="status-${req.status}">
+                <td>${req.empCode}</td>
+                <td>${req.empName}</td>
+                <td>${req.startDate}</td>
+                <td>${req.days}</td>
+                <td>${req.reason || '-'}</td>
+                <td>${req.status === 'pending' ? 'انتظار' : 'تم'}</td>
+                <td>
+                    ${req.status === 'pending' ? `
+                        <button onclick="updateStatus(${req.id}, 'approved')" style="background:#4CAF50; padding:5px;">قبول</button>
+                        <button onclick="updateStatus(${req.id}, 'rejected')" class="danger" style="padding:5px;">رفض</button>
+                    ` : '-'}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function updateStatus(id, status) {
+        await supabaseClient.from('requests').update({ status }).eq('id', id);
+        loadRequests();
+    }
+
+    // عرض طلبات الموظف الحالي
+    async function loadMyRequests() {
+        const { data } = await supabaseClient.from('requests').select('*').eq('empCode', currentUser.code);
+        const tbody = document.querySelector('#myRequestsTable tbody');
+        tbody.innerHTML = (data || []).map(req => `
+            <tr class="status-${req.status}">
+                <td>${req.startDate}</td>
+                <td>${req.days}</td>
+                <td>${req.reason}</td>
+                <td>${req.status}</td>
+            </tr>
+        `).join('');
+    }
+
+    // رفع ملف Excel
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+            const newEmployees = [];
+            for (let i = 1; i < json.length; i++) {
+                if (json[i][0]) {
+                    newEmployees.push({
+                        code: String(json[i][0]).toUpperCase(),
+                        name: json[i][1],
+                        jobTitle: json[i][2],
+                        hire_date: json[i][3],
+                        balance: parseInt(json[i][4]) || 0
+                    });
                 }
-            } catch (err) {
-                console.error("Login Error:", err);
-                alert('❌ الكود غير صحيح أو الموظف غير مسجل في النظام.');
             }
-        }
-
-        // إضافة موظف جديد
-        async function addEmployee() {
-            const emp = {
-                code: document.getElementById('empCode').value.trim().toUpperCase(),
-                name: document.getElementById('empName').value.trim(),
-                jobTitle: document.getElementById('empTitle').value.trim(),
-                balance: parseInt(document.getElementById('empBalance').value) || 0
-            };
-
-            if (!emp.code || !emp.name) {
-                alert('الرجاء إدخال كود واسم الموظف على الأقل!');
-                return;
-            }
-
-            const { error } = await supabaseClient.from('employees').upsert([emp]);
-            if (error) {
-                alert('خطأ أثناء الحفظ: ' + error.message);
-            } else {
-                alert('✅ تم حفظ بيانات الموظف بنجاح!');
-                document.getElementById('empCode').value = '';
-                document.getElementById('empName').value = '';
-                document.getElementById('empTitle').value = '';
-                document.getElementById('empBalance').value = '';
-                loadEmployees(); 
-            }
-        }
-
-        // جلب وعرض الموظفين
-        async function loadEmployees() {
-            const { data } = await supabaseClient.from('employees').select('*').order('code');
-            const tbody = document.querySelector('#employeesTable tbody');
-            tbody.innerHTML = (data || []).map(e => `
-                <tr>
-                    <td>${e.code}</td>
-                    <td>${e.name}</td>
-                    <td>${e.jobTitle || '-'}</td>
-                    <td>${e.balance} يوم</td>
-                    <td><button onclick="deleteEmp('${e.code}')" class="danger" style="padding:6px 12px">حذف</button></td>
-                </tr>
-            `).join('');
-        }
-
-        // حذف موظف
-        async function deleteEmp(code) {
-            if (confirm('هل أنت متأكد من حذف هذا الموظف نهائياً؟')) {
-                await supabaseClient.from('employees').delete().eq('code', code);
+            if (confirm(`استيراد ${newEmployees.length} موظف؟`)) {
+                await supabaseClient.from('employees').upsert(newEmployees);
                 loadEmployees();
+                alert('تم الاستيراد');
             }
-        }
+        };
+        reader.readAsArrayBuffer(file);
+    }
 
-        // إرسال طلب إجازة
-        async function submitRequest() {
-            const startDate = document.getElementById('startDate').value;
-            const days = parseInt(document.getElementById('days').value);
-            const reason = document.getElementById('reason').value;
+    // وظائف الواجهة
+    function showAdminPanel() {
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('adminPanel').classList.remove('hidden');
+        loadEmployees();
+    }
 
-            if (!startDate || !days || days <= 0) {
-                alert('الرجاء تحديد تاريخ البداية وعدد أيام صحيح!');
-                return;
-            }
+    function showEmployeePanel() {
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('employeePanel').classList.remove('hidden');
+        document.getElementById('currentEmpName').textContent = currentUser.name;
+        document.getElementById('currentEmpCode').textContent = currentUser.code;
+    }
 
-            const req = {
-                empCode: currentUser.code,
-                empName: currentUser.name,
-                startDate: startDate,
-                days: days,
-                reason: reason,
-                status: 'pending'
-            };
+    function showSection(id) {
+        document.getElementById('employeesSection').classList.add('hidden');
+        document.getElementById('requestsSection').classList.add('hidden');
+        document.getElementById(id).classList.remove('hidden');
+        if (id === 'requestsSection') loadRequests();
+    }
 
-            const { error } = await supabaseClient.from('requests').insert([req]);
-            if (error) {
-                alert('فشل الإرسال: ' + error.message);
-            } else {
-                alert('✅ تم إرسال طلب الإجازة للمدير بنجاح');
-                document.getElementById('startDate').value = '';
-                document.getElementById('days').value = '';
-                document.getElementById('reason').value = '';
-            }
-        }
+    function showMyRequests() {
+        document.getElementById('newRequestSection').classList.add('hidden');
+        document.getElementById('myRequestsSection').classList.remove('hidden');
+        loadMyRequests();
+    }
 
-        // عرض كل الطلبات (للمدير)
-        async function loadRequests() {
-            const { data } = await supabaseClient.from('requests').select('*').order('id', { ascending: false });
-            const tbody = document.querySelector('#requestsTable tbody');
-            tbody.innerHTML = (data || []).map(r => `
-                <tr class="status-${r.status}">
-                    <td>${r.empName} <br><small>(${r.empCode})</small></td>
-                    <td>${r.startDate}</td>
-                    <td>${r.days} يوم</td>
-                    <td>${r.reason || '-'}</td>
-                    <td>${r.status === 'pending' ? '⏳ انتظار' : r.status === 'approved' ? '✅ مقبول' : '❌ مرفوض'}</td>
-                    <td>
-                        ${r.status === 'pending' ? `
-                            <button onclick="updateReq(${r.id},'approved')" style="background:#28a745; padding:6px 10px;">قبول</button>
-                            <button onclick="updateReq(${r.id},'rejected')" class="danger" style="padding:6px 10px;">رفض</button>
-                        ` : 'تم الإجراء'}
-                    </td>
-                </tr>
-            `).join('');
-        }
+    function showNewRequest() {
+        document.getElementById('newRequestSection').classList.remove('hidden');
+        document.getElementById('myRequestsSection').classList.add('hidden');
+    }
 
-        // تحديث حالة الطلب (قبول/رفض)
-        async function updateReq(id, status) {
-            if(confirm(`هل أنت متأكد أنك تريد ${status === 'approved' ? 'قبول' : 'رفض'} هذا الطلب؟`)) {
-                await supabaseClient.from('requests').update({ status }).eq('id', id);
-                loadRequests();
-            }
-        }
+    function logout() { location.reload(); }
 
-        // عرض طلباتي (للموظف)
-        async function loadMyRequests() {
-            showSection('myRequestsSection'); 
-            const { data } = await supabaseClient.from('requests').select('*').eq('empCode', currentUser.code).order('id', { ascending: false });
-            const tbody = document.querySelector('#myRequestsTable tbody');
-            tbody.innerHTML = (data || []).map(r => `
-                <tr class="status-${r.status}">
-                    <td>${r.startDate}</td>
-                    <td>${r.days} يوم</td>
-                    <td>${r.reason || '-'}</td>
-                    <td>${r.status === 'pending' ? '⏳ قيد المراجعة' : r.status === 'approved' ? '✅ تمت الموافقة' : '❌ مرفوض'}</td>
-                </tr>
-            `).join('');
-        }
-
-        // -- دوال التنقل بين الشاشات --
-        function showAdminPanel() {
-            document.getElementById('loginScreen').classList.add('hidden');
-            document.getElementById('adminPanel').classList.remove('hidden');
-            document.getElementById('employeePanel').classList.add('hidden');
-            loadEmployees(); 
-        }
-
-        function showEmployeePanel() {
-            document.getElementById('loginScreen').classList.add('hidden');
-            document.getElementById('adminPanel').classList.add('hidden');
-            document.getElementById('employeePanel').classList.remove('hidden');
-            showSection('newRequestSection'); 
-        }
-
-        function showSection(id) {
-            ['employeesSection', 'requestsSection', 'newRequestSection', 'myRequestsSection'].forEach(s => {
-                const el = document.getElementById(s);
-                if (el) el.classList.add('hidden');
-            });
-            document.getElementById(id).classList.remove('hidden');
-            if (id === 'requestsSection') loadRequests();
-        }
-
-        function logout() { 
-            location.reload(); 
-        }
-    </script>
+    function clearEmployeeForm() {
+        ['empName', 'empCode', 'empTitle', 'empHireDate', 'empBalance'].forEach(id => document.getElementById(id).value = '');
+    }
+</script>
 </body>
 </html>
 
